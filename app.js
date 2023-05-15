@@ -1,10 +1,18 @@
 const express = require("express");
 const app = express();
-
+const winston = require("winston");
 const port = 3000;
 const https = require("https");
 const key = "2121a1d58e7f8d6a40f2e47a291f2308";
 
+const logger = winston.createLogger({
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({
+      filename: "C:/Users/PC/Desktop/api/app.log",
+    }),
+  ],
+});
 // Endpoint for retrieving current weather conditions
 app.get("/weather/current", (req, res) => {
   const location = req.query.location; // Retrieve the location from the query string
@@ -19,7 +27,7 @@ app.get("/weather/current", (req, res) => {
     response.on("data", function (data) {
       const weatherData = JSON.parse(data);
       //const temperature = weatherData.main.temp;
-      console.log(weatherData);
+      logger.info(weatherData);
 
       res.send({
         //current: "Temperature is " + temperature,
@@ -43,7 +51,7 @@ app.get("/weather/forecast", (req, res) => {
     response.on("data", function (data) {
       const weatherData = JSON.parse(data);
       //const temperature = weatherData.main.temp;
-      console.log(weatherData);
+      logger.info(weatherData);
 
       res.send({
         //current: "Temperature is " + temperature,
@@ -85,10 +93,13 @@ app.get("/weather/history", async (req, res) => {
   console.log(api);
 
   https.get(api, function (response) {
+    let weatherData = "";
     response.on("data", function (data) {
-      const weatherData = JSON.parse(data);
-      console.log(weatherData);
-
+      weatherData += data;
+    });
+    response.on("end", function () {
+      const parsedWeatherData = JSON.parse(weatherData);
+      logger.info(parsedWeatherData);
       res.send({
         loc: "Location is " + location,
       });

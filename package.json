@@ -1,7 +1,8 @@
 {
   "dependencies": {
     "express": "^4.18.2",
-    "node": "^20.1.0"
+    "node": "^20.1.0",
+    "winston": "^3.8.2"
   },
   "name": "api-homework",
   "description": "software engineering class",
