@@ -1,110 +1,176 @@
-const express = require("express");
-const app = express();
-const winston = require("winston");
-const port = 3000;
+const Winston = require("winston");
 const https = require("https");
-const key = "2121a1d58e7f8d6a40f2e47a291f2308";
+const express = require("express");
+const NodeCache = require("node-cache");
 
-const logger = winston.createLogger({
+const app = express();
+
+const port = 3000;
+const key = "2121a1d58e7f8d6a40f2e47a291f2308";
+const myCache = new NodeCache();
+//takes yyyy-mm-dd format and converts it to unix format requested by api
+function UnixTime(date) {
+  date = new Date(date);
+  const UnixTime = Date.parse(date) / 1000;
+  return UnixTime;
+}
+
+//creates a log file
+const log = Winston.createLogger({
   transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({
+    new Winston.transports.File({
       filename: "C:/Users/PC/Desktop/api/app.log",
     }),
   ],
 });
+
 // Endpoint for retrieving current weather conditions
 app.get("/weather/current", (req, res) => {
-  const location = req.query.location; // Retrieve the location from the query string
-  const api =
-    "https://api.openweathermap.org/data/2.5/weather?q=" +
-    location +
-    "&appid=" +
-    key +
-    "&units=metric";
-  console.log(api);
-  https.get(api, function (response) {
-    response.on("data", function (data) {
-      const weatherData = JSON.parse(data);
-      //const temperature = weatherData.main.temp;
-      logger.info(weatherData);
-
-      res.send({
-        //current: "Temperature is " + temperature,
-        loc: "Location is " + location,
+  try {
+    const location = req.query.location; // Retrieve the location from the query string
+    if (!location) {
+      return res.status(400).json({
+        error: "400 Bad Request error location parameter is required",
       });
-    });
-  });
+    }
+    const cachedData = myCache.get(location);
+    if (cachedData) {
+      console.log("cache:", cachedData);
+      res.json({ cachedData, message: "cache" });
+    } else {
+      const api =
+        "https://api.openweathermap.org/data/2.5/weather?q=" +
+        location +
+        "&appid=" +
+        key +
+        "&units=metric";
+      console.log(api);
+      https.get(api, function (response) {
+        response.on("data", function (data) {
+          const weatherData = JSON.parse(data);
+          myCache.set(location, weatherData, 120);
+          console.log(weatherData);
+          log.info(weatherData);
+          res.send({ location: location, weatherData });
+        });
+      });
+    }
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: "error, can't retreive current weather" });
+  }
 });
 
 // Endpoint for retrieving weather forecast
 app.get("/weather/forecast", (req, res) => {
-  const location = req.query.location;
-  const api =
-    "https://api.openweathermap.org/data/2.5/forecast?q=" +
-    location +
-    "&appid=" +
-    key +
-    "&units=metric";
-  console.log(api);
-  https.get(api, function (response) {
-    response.on("data", function (data) {
-      const weatherData = JSON.parse(data);
-      //const temperature = weatherData.main.temp;
-      logger.info(weatherData);
-
-      res.send({
-        //current: "Temperature is " + temperature,
-        loc: "Location is " + location,
+  try {
+    const location = req.query.location;
+    if (!location) {
+      return res.status(400).json({
+        error: "400 Bad Request error location parameter is required",
       });
-    });
-  });
+    }
+    const cachedData = myCache.get(location);
+    if (cachedData) {
+      console.log("cache:", cachedData);
+      res.json({ cachedData, message: "cache" });
+    } else {
+      const api =
+        "https://api.openweathermap.org/data/2.5/forecast?q=" +
+        location +
+        "&appid=" +
+        key +
+        "&units=metric";
+      console.log(api);
+      https.get(api, function (response) {
+        response.on("data", function (data) {
+          const weatherData = JSON.parse(data);
+          myCache.set(location, weatherData, 120);
+          console.log(weatherData);
+          log.info(weatherData);
+
+          res.send({
+            location: location,
+            weatherData,
+          });
+        });
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: "error, can't retreive forecast" });
+  }
 });
 
 // Endpoint for retrieving historical weather data
 app.get("/weather/history", async (req, res) => {
-  const location = req.query.location; // Retrieve the location from the query string
-  const startDate = req.query.startDate; // Retrieve the start date from the query string
-  const endDate = req.query.endDate; // Retrieve the end date from the query string
-
-  const link =
-    "https://api.openweathermap.org/geo/1.0/direct?q=" +
-    location +
-    "&appid=" +
-    key;
-
-  const Res = await fetch(link);
-  const data = await Res.json();
-  const la = data[0].lat;
-  const lo = data[0].lon;
-
-  const api =
-    "https://history.openweathermap.org/data/2.5/history/city?lat=" +
-    la +
-    "&lon=" +
-    lo +
-    "&appid=" +
-    key +
-    "&start=" +
-    startDate +
-    "&end=" +
-    endDate +
-    "&units=metric";
-  console.log(api);
-
-  https.get(api, function (response) {
-    let weatherData = "";
-    response.on("data", function (data) {
-      weatherData += data;
-    });
-    response.on("end", function () {
-      const parsedWeatherData = JSON.parse(weatherData);
-      logger.info(parsedWeatherData);
-      res.send({
-        loc: "Location is " + location,
+  try {
+    const location = req.query.location; // Retrieve the location from the query string
+    const startDate = UnixTime(req.query.startDate); // Retrieve the start date from the query string
+    const endDate = UnixTime(req.query.endDate); // Retrieve the end date from the query string
+    if (!location) {
+      return res.status(400).json({
+        error: "400 Bad Request error location parameter is required",
       });
-    });
-  });
+    }
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        error: "400 Bad start and end dates are required",
+      });
+    }
+    const cachedData = myCache.get(location);
+    if (cachedData) {
+      console.log("cache:", cachedData);
+      res.json({ cachedData, message: "cache" });
+    } else {
+      //secondary api for getting longitude and latitude info
+      const link =
+        "https://api.openweathermap.org/geo/1.0/direct?q=" +
+        location +
+        "&appid=" +
+        key;
+
+      const Res = await fetch(link);
+      const data = await Res.json();
+      const la = data[0].lat;
+      const lo = data[0].lon;
+
+      const api =
+        "https://history.openweathermap.org/data/2.5/history/city?lat=" +
+        la +
+        "&lon=" +
+        lo +
+        "&appid=" +
+        key +
+        "&start=" +
+        startDate +
+        "&end=" +
+        endDate +
+        "&units=metric";
+      console.log(api);
+
+      https.get(api, function (response) {
+        let weatherData = "";
+        response.on("data", function (data) {
+          weatherData += data;
+        });
+        response.on("end", function () {
+          const parsedWeatherData = JSON.parse(weatherData);
+          myCache.set(location, parsedWeatherData, 120);
+          console.log(parsedWeatherData);
+          log.info(parsedWeatherData);
+          res.send({
+            lattitude: la,
+            longitude: lo,
+            location: location,
+            parsedWeatherData,
+          });
+        });
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: "error, can't retreive forecast" });
+  }
 });
 
 // Error handling middleware
@@ -115,5 +181,5 @@ app.use((err, req, res, next) => {
 
 // Start the server
 app.listen(port, () => {
-  console.log("Server started on port 3000");
+  console.log("Server started on port" + port);
 });
